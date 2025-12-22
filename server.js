@@ -492,6 +492,9 @@ app.get('/api/tiles/:z/:x/:y.png', (req, res) => {
   }
 });
 
+// Webhook은 별도 서버(포트 3005)로 분리되었습니다.
+// webhook-server.js를 참고하세요.
+
 // 서버 시작
 async function startServer() {
   await ensureUploadDir();
