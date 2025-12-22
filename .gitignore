@@ -31,3 +31,11 @@ Thumbs.db
 *.swo
 *~
 
+# Documentation files (모든 MD 파일 제외)
+*.md
+
+# Secrets 파일 (절대 업로드 금지)
+GITHUB_SECRETS_VALUES.txt
+*SECRETS*.txt
+*secrets*.txt
+
