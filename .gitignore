@@ -1,0 +1,33 @@
+# Dependencies
+node_modules/
+yarn.lock
+# package-lock.json은 GitHub Actions에서 필요하므로 포함해야 함
+
+# Uploads
+uploads/
+*.zip
+
+# Data files
+data/
+public/visits.json
+
+# Environment variables
+.env
+.env.local
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+

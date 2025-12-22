@@ -1,0 +1,1125 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <title>Timeline Visits Map</title>
+
+  <!-- MapLibre GL JS -->
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.css"
+  />
+
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body, html {
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
+    }
+
+    #map {
+      height: 100vh;
+      width: 100%;
+    }
+
+    /* 상단 컨트롤 */
+    #controls {
+      position: absolute;
+      top: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 1000;
+      background: white;
+      padding: 20px 24px;
+      border-radius: 16px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+      width: 90%;
+      max-width: 800px;
+      backdrop-filter: blur(10px);
+    }
+
+    #dateLabel {
+      font-weight: 700;
+      font-size: 18px;
+      margin-bottom: 8px;
+      text-align: center;
+      color: #333;
+    }
+
+    #locationLabel {
+      font-size: 15px;
+      color: #667eea;
+      margin-bottom: 12px;
+      text-align: center;
+      font-weight: 600;
+    }
+
+    #timeline {
+      width: 100%;
+      height: 8px;
+      border-radius: 4px;
+      background: #e9ecef;
+      outline: none;
+      -webkit-appearance: none;
+      margin-bottom: 12px;
+      pointer-events: none;
+      cursor: default;
+      opacity: 0.7;
+    }
+
+    #timeline::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      -moz-appearance: none;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      cursor: default;
+      box-shadow: 0 2px 6px rgba(102, 126, 234, 0.4);
+      transition: all 0.3s ease;
+      pointer-events: none;
+    }
+
+    #timeline::-webkit-slider-thumb:hover {
+      transform: none;
+      box-shadow: 0 2px 6px rgba(102, 126, 234, 0.4);
+    }
+
+    #timeline::-moz-range-thumb {
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      cursor: default;
+      border: none;
+      box-shadow: 0 2px 6px rgba(102, 126, 234, 0.4);
+      transition: all 0.3s ease;
+      pointer-events: none;
+    }
+
+    #timeline::-moz-range-thumb:hover {
+      transform: none;
+      box-shadow: 0 2px 6px rgba(102, 126, 234, 0.4);
+    }
+
+    #buttons {
+      margin-top: 8px;
+      text-align: center;
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+
+    button {
+      padding: 10px 20px;
+      margin: 0;
+      cursor: pointer;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      transition: all 0.3s ease;
+      font-family: inherit;
+    }
+
+    #playBtn, #restartBtn {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+    }
+
+    #playBtn:hover, #restartBtn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 20px rgba(102, 126, 234, 0.4);
+    }
+
+    #pauseBtn {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+    }
+
+    #pauseBtn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 20px rgba(102, 126, 234, 0.4);
+    }
+
+    #speedBtn {
+      background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+      color: white;
+    }
+
+    #speedBtn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 20px rgba(245, 158, 11, 0.4);
+    }
+
+    #speedBtn.active {
+      background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+    }
+
+    .legend {
+      background: rgba(255, 255, 255, 0.98);
+      padding: 14px 16px;
+      font-size: 13px;
+      line-height: 1.8;
+      border-radius: 12px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      backdrop-filter: blur(10px);
+    }
+
+    .mapboxgl-popup-content {
+      border-radius: 12px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.25);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      padding: 16px;
+    }
+
+    .mapboxgl-popup-close-button {
+      font-size: 20px;
+      padding: 4px 8px;
+    }
+
+    /* 클러스터 마커 스타일 */
+    .cluster-marker {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      border-radius: 50%;
+      color: white;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: 3px solid white;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+      cursor: pointer;
+      transition: all 0.3s ease;
+    }
+
+    .cluster-marker:hover {
+      transform: scale(1.15);
+      box-shadow: 0 6px 16px rgba(0,0,0,0.4);
+    }
+
+    /* 드롭다운 메뉴 스타일 */
+    .cluster-dropdown {
+      position: absolute;
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.25);
+      max-height: 400px;
+      overflow-y: auto;
+      z-index: 2000;
+      min-width: 300px;
+      max-width: 500px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      display: none;
+    }
+
+    .cluster-dropdown.show {
+      display: block;
+    }
+
+    .cluster-dropdown-header {
+      padding: 16px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border-radius: 12px 12px 0 0;
+      font-weight: 700;
+      font-size: 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .cluster-dropdown-close {
+      background: rgba(255,255,255,0.2);
+      border: none;
+      color: white;
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      cursor: pointer;
+      font-size: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s ease;
+    }
+
+    .cluster-dropdown-close:hover {
+      background: rgba(255,255,255,0.3);
+    }
+
+    .cluster-dropdown-item {
+      padding: 12px 16px;
+      border-bottom: 1px solid #eee;
+      cursor: pointer;
+      transition: background 0.2s ease;
+    }
+
+    .cluster-dropdown-item:hover {
+      background: #f8f9fa;
+    }
+
+    .cluster-dropdown-item:last-child {
+      border-bottom: none;
+    }
+
+    .cluster-item-type {
+      font-weight: 600;
+      font-size: 14px;
+      margin-bottom: 4px;
+    }
+
+    .cluster-item-time {
+      font-size: 12px;
+      color: #666;
+      margin-bottom: 2px;
+    }
+
+    .cluster-item-duration {
+      font-size: 11px;
+      color: #999;
+    }
+  </style>
+</head>
+<body>
+
+<div id="controls">
+  <div id="dateLabel">날짜</div>
+  <div id="locationLabel">지역명</div>
+  <input id="timeline" type="range" min="0" max="0" value="0" step="1" disabled />
+  <div id="buttons">
+    <button id="playBtn">▶ 재생</button>
+    <button id="pauseBtn" style="display:none;">⏸ 정지</button>
+    <button id="restartBtn">⏮ 다시 재생</button>
+    <button id="speedBtn">⏩ 1x</button>
+    <button id="downloadBtn" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white;">💾 다운로드</button>
+  </div>
+</div>
+
+<div id="map"></div>
+
+<script src="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js"></script>
+<script>
+// 메모리 효율적인 데이터 로딩
+async function loadVisitsData() {
+  try {
+    console.log('데이터 로딩 시작...');
+    const response = await fetch('visits.json');
+    
+    if (!response.ok) {
+      throw new Error('데이터를 불러올 수 없습니다.');
+    }
+
+    // 스트리밍으로 JSON 파싱 (대용량 파일 처리)
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let jsonText = '';
+    let chunkCount = 0;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      
+      jsonText += decoder.decode(value, { stream: true });
+      chunkCount++;
+      
+      // 진행 상황 표시 (큰 파일의 경우)
+      if (chunkCount % 100 === 0) {
+        console.log(`데이터 로딩 중... (${chunkCount} 청크)`);
+      }
+    }
+
+    console.log('JSON 파싱 시작...');
+    const data = JSON.parse(jsonText);
+    jsonText = null; // 메모리 해제
+
+    console.log(`로드된 데이터: ${data.length}개 항목`);
+
+    /* 1️⃣ visit 데이터만 추출 (이미 서버에서 최적화됨) */
+    const visits = data.filter(d =>
+      d.placeLocation && d.startTime && d.endTime
+    );
+
+    console.log(`유효한 방문 데이터: ${visits.length}개`);
+
+    /* 2️⃣ 포인트 변환 (메모리 효율적으로) */
+    const points = [];
+    for (let i = 0; i < visits.length; i++) {
+      const d = visits[i];
+      try {
+        const [lat, lng] = d.placeLocation
+          .replace('geo:', '')
+          .split(',')
+          .map(Number);
+
+        if (isNaN(lat) || isNaN(lng)) continue;
+
+        const start = new Date(d.startTime);
+        const end = new Date(d.endTime);
+        const durationHours = (end - start) / 1000 / 60 / 60;
+
+        points.push({
+          lat,
+          lng,
+          start,
+          end,
+          durationHours,
+          type: d.semanticType || 'Unknown'
+        });
+      } catch (e) {
+        console.warn(`데이터 변환 실패 (인덱스 ${i}):`, e);
+      }
+
+      // 메모리 관리를 위한 주기적 힌트
+      if (i % 5000 === 0 && i > 0) {
+        console.log(`포인트 변환 중... ${i}/${visits.length} (${((i/visits.length)*100).toFixed(1)}%)`);
+      }
+    }
+
+    console.log(`변환된 포인트: ${points.length}개`);
+    
+    // 메모리 사용량 확인 (가능한 경우)
+    if (performance.memory) {
+      const memoryMB = (performance.memory.usedJSHeapSize / 1024 / 1024).toFixed(2);
+      console.log(`현재 메모리 사용량: ${memoryMB} MB`);
+    }
+    
+    // 원본 데이터 참조 해제
+    data.length = 0;
+    visits.length = 0;
+
+    return points;
+  } catch (error) {
+    console.error('데이터 로딩 오류:', error);
+    throw error;
+  }
+}
+
+loadVisitsData().then(points => {
+
+    /* 3️⃣ 시간순 정렬 */
+    console.log('시간순 정렬 중...');
+    points.sort((a, b) => a.start - b.start);
+    console.log('정렬 완료');
+    
+    // 메모리 사용량 확인
+    if (performance.memory) {
+      const memoryMB = (performance.memory.usedJSHeapSize / 1024 / 1024).toFixed(2);
+      console.log(`정렬 후 메모리 사용량: ${memoryMB} MB`);
+    }
+
+    /* 4️⃣ 지도 초기화 */
+    const map = new maplibregl.Map({
+      container: 'map',
+      style: {
+        version: 8,
+        sources: {
+          'raster-tiles': {
+            type: 'raster',
+            tiles: [
+              '/api/tiles/{z}/{x}/{y}.png'  // 서버 프록시를 통해 타일 로드 (CORS 문제 해결, fallback 지원)
+            ],
+            tileSize: 256,
+            attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+          }
+        },
+        layers: [
+          {
+            id: 'simple-tiles',
+            type: 'raster',
+            source: 'raster-tiles',
+            minzoom: 0,
+            maxzoom: 19  // OpenStreetMap은 최대 19까지만 지원
+          }
+        ]
+      },
+      center: [points[0].lng, points[0].lat],
+      zoom: 13,
+      maxZoom: 19  // 지도 최대 줌 레벨 제한 (CORS 및 400 오류 방지)
+    });
+
+    // 네비게이션 컨트롤 추가
+    map.addControl(new maplibregl.NavigationControl(), 'top-right');
+
+    // 타일 로딩 에러 처리
+    map.on('error', (e) => {
+      console.error('Map error:', e);
+      if (e.error && e.error.message) {
+        console.error('Error message:', e.error.message);
+      }
+    });
+
+    // 타일 소스 에러 처리
+    map.on('sourcedata', (e) => {
+      if (e.isSourceLoaded && e.sourceId === 'raster-tiles') {
+        if (e.tile && e.tile.state === 'errored') {
+          console.warn('Tile load error for:', e.tile.tileID);
+        }
+      }
+    });
+
+    const slider = document.getElementById('timeline');
+    const dateLabel = document.getElementById('dateLabel');
+    const locationLabel = document.getElementById('locationLabel');
+    const playBtn = document.getElementById('playBtn');
+    const pauseBtn = document.getElementById('pauseBtn');
+    const restartBtn = document.getElementById('restartBtn');
+    const speedBtn = document.getElementById('speedBtn');
+    const downloadBtn = document.getElementById('downloadBtn');
+
+    slider.max = points.length - 1;
+
+    let timer = null;
+    let markers = [];
+    let popups = [];
+    
+    // 재생 속도 상태 (1x, 2x, 4x)
+    let playbackSpeed = 1; // 기본 속도
+    const speedOptions = [1, 2, 4]; // 1배속, 2배속, 4배속
+    const baseInterval = 500; // 기본 간격 (ms)
+
+    function getColor(type) {
+      if (type.includes('Home')) return '#10b981'; // 에메랄드 그린
+      if (type.includes('Work')) return '#3b82f6'; // 밝은 파란색
+      return '#8b5cf6'; // 보라색
+    }
+
+    function getColorLight(type) {
+      if (type.includes('Home')) return '#34d399'; // 밝은 에메랄드
+      if (type.includes('Work')) return '#60a5fa'; // 밝은 파란색
+      return '#a78bfa'; // 밝은 보라색
+    }
+
+    // 두 지점 간 거리 계산 (하버사인 공식)
+    function getDistance(lat1, lng1, lat2, lng2) {
+      const R = 6371; // 지구 반경 (km)
+      const dLat = (lat2 - lat1) * Math.PI / 180;
+      const dLng = (lng2 - lng1) * Math.PI / 180;
+      const a = 
+        Math.sin(dLat/2) * Math.sin(dLat/2) +
+        Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+        Math.sin(dLng/2) * Math.sin(dLng/2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+      return R * c * 1000; // 미터 단위로 반환
+    }
+
+    // 클러스터링 함수 (가까운 마커들을 그룹화)
+    function clusterMarkers(points, clusterRadius = 50) {
+      const clusters = [];
+      const used = new Set();
+      
+      // 줌 레벨에 따라 클러스터 반경 조정 (최소 5미터 보장)
+      const zoom = map ? map.getZoom() : 13;
+      const baseAdjustedRadius = clusterRadius * (1 / Math.pow(2, Math.max(0, zoom - 10)));
+      const adjustedRadius = Math.max(5, baseAdjustedRadius); // 최소 5미터 보장
+      
+      // 좌표 정밀도 (같은 좌표로 간주할 최소 차이, 미터 단위)
+      const coordinatePrecision = 0.00001; // 약 1미터
+      
+      for (let i = 0; i < points.length; i++) {
+        if (used.has(i)) continue;
+        
+        const cluster = {
+          points: [points[i]],
+          centerLat: points[i].lat,
+          centerLng: points[i].lng,
+          indices: [i]
+        };
+        
+        used.add(i);
+        
+        // 가까운 포인트들을 클러스터에 추가
+        for (let j = i + 1; j < points.length; j++) {
+          if (used.has(j)) continue;
+          
+          // 완전히 같은 좌표인지 먼저 확인 (성능 최적화)
+          const latDiff = Math.abs(points[i].lat - points[j].lat);
+          const lngDiff = Math.abs(points[i].lng - points[j].lng);
+          
+          let shouldCluster = false;
+          
+          // 완전히 같은 좌표 (또는 매우 가까운 좌표)
+          if (latDiff < coordinatePrecision && lngDiff < coordinatePrecision) {
+            shouldCluster = true;
+          } else {
+            // 거리 기반 클러스터링
+            const distance = getDistance(
+              cluster.centerLat, cluster.centerLng,
+              points[j].lat, points[j].lng
+            );
+            shouldCluster = distance <= adjustedRadius;
+          }
+          
+          if (shouldCluster) {
+            cluster.points.push(points[j]);
+            cluster.indices.push(j);
+            used.add(j);
+            
+            // 클러스터 중심 재계산
+            cluster.centerLat = cluster.points.reduce((sum, p) => sum + p.lat, 0) / cluster.points.length;
+            cluster.centerLng = cluster.points.reduce((sum, p) => sum + p.lng, 0) / cluster.points.length;
+          }
+        }
+        
+        clusters.push(cluster);
+      }
+      
+      return clusters;
+    }
+
+    // 드롭다운 메뉴 생성
+    function createClusterDropdown(cluster, markerElement) {
+      // 기존 드롭다운 제거
+      const existing = document.querySelector('.cluster-dropdown');
+      if (existing) {
+        existing.remove();
+      }
+
+      const dropdown = document.createElement('div');
+      dropdown.className = 'cluster-dropdown';
+      
+      const header = document.createElement('div');
+      header.className = 'cluster-dropdown-header';
+      header.innerHTML = `
+        <span>📍 ${cluster.points.length}개 위치</span>
+        <button class="cluster-dropdown-close">×</button>
+      `;
+      
+      const content = document.createElement('div');
+      content.style.maxHeight = '300px';
+      content.style.overflowY = 'auto';
+      
+      // 시간순 정렬
+      const sortedPoints = [...cluster.points].sort((a, b) => a.start - b.start);
+      
+      sortedPoints.forEach((point, idx) => {
+        const item = document.createElement('div');
+        item.className = 'cluster-dropdown-item';
+        const color = getColor(point.type);
+        item.innerHTML = `
+          <div class="cluster-item-type" style="color: ${color};">${point.type}</div>
+          <div class="cluster-item-time">🕐 ${point.start.toLocaleString('ko-KR')}</div>
+          <div class="cluster-item-duration">⏱️ ${point.durationHours.toFixed(1)}시간 | 📍 ${point.lat.toFixed(4)}, ${point.lng.toFixed(4)}</div>
+        `;
+        
+        item.addEventListener('click', () => {
+          map.flyTo({
+            center: [point.lng, point.lat],
+            zoom: Math.max(map.getZoom(), 15),
+            duration: 500
+          });
+          dropdown.classList.remove('show');
+        });
+        
+        content.appendChild(item);
+      });
+      
+      dropdown.appendChild(header);
+      dropdown.appendChild(content);
+      
+      // 닫기 버튼
+      header.querySelector('.cluster-dropdown-close').addEventListener('click', () => {
+        dropdown.classList.remove('show');
+      });
+      
+      // 외부 클릭 시 닫기
+      document.addEventListener('click', function closeDropdown(e) {
+        if (!dropdown.contains(e.target) && !markerElement.contains(e.target)) {
+          dropdown.classList.remove('show');
+          document.removeEventListener('click', closeDropdown);
+        }
+      });
+      
+      document.body.appendChild(dropdown);
+      
+      // 마커 위치 기준으로 드롭다운 위치 설정
+      const markerRect = markerElement.getBoundingClientRect();
+      const mapRect = map.getContainer().getBoundingClientRect();
+      
+      dropdown.style.position = 'fixed';
+      dropdown.style.left = markerRect.left + markerRect.width / 2 - 150 + 'px';
+      dropdown.style.top = markerRect.bottom + 10 + 'px';
+      
+      // 화면 밖으로 나가지 않도록 조정
+      if (parseInt(dropdown.style.left) < 10) {
+        dropdown.style.left = '10px';
+      }
+      if (parseInt(dropdown.style.left) + 300 > window.innerWidth) {
+        dropdown.style.left = (window.innerWidth - 310) + 'px';
+      }
+      if (parseInt(dropdown.style.top) + 400 > window.innerHeight) {
+        dropdown.style.top = (markerRect.top - 410) + 'px';
+      }
+      
+      return dropdown;
+    }
+
+    /* 5️⃣ 렌더 함수 (메모리 최적화) */
+    function render(index, options = {}) {
+      const { skipAutoMove = false } = options;
+      currentRenderIndex = index;
+      // 기존 마커와 팝업 제거 (메모리 해제)
+      markers.forEach(marker => {
+        if (marker && marker.remove) {
+          marker.remove();
+        }
+      });
+      popups.forEach(popup => {
+        if (popup && popup.remove) {
+          popup.remove();
+        }
+      });
+      markers.length = 0; // 배열 초기화
+      popups.length = 0;
+
+      // 현재 인덱스까지의 포인트만 사용 (메모리 절약)
+      const visible = points.slice(0, index + 1);
+      
+      // 최대 표시 마커 수 제한 (성능 향상)
+      const MAX_MARKERS = 1000;
+      const visibleForMarkers = visible.length > MAX_MARKERS 
+        ? visible.slice(-MAX_MARKERS) // 최근 N개만 표시
+        : visible;
+
+      // 날짜 표시
+      const current = visible[visible.length - 1];
+      dateLabel.textContent =
+        current.start.toLocaleDateString() + ' ' +
+        current.start.toLocaleTimeString();
+      
+      // 지역명 표시
+      locationLabel.textContent = current.type;
+
+      // 이동 경로 라인 업데이트 (더 명확하게 표시)
+      if (visible.length > 1) {
+        const maxPathPoints = 10000; // 경로 포인트 수 증가
+        const pathPoints = visible.length > maxPathPoints 
+          ? visible.slice(-maxPathPoints) // 최근 N개만 사용
+          : visible;
+        const coordinates = pathPoints.map(p => [p.lng, p.lat]);
+        
+        // 기존 소스가 있으면 업데이트, 없으면 생성
+        if (map.getSource('route')) {
+          map.getSource('route').setData({
+            type: 'Feature',
+            properties: {},
+            geometry: {
+              type: 'LineString',
+              coordinates: coordinates
+            }
+          });
+        } else {
+          map.addSource('route', {
+            type: 'geojson',
+            data: {
+              type: 'Feature',
+              properties: {},
+              geometry: {
+                type: 'LineString',
+                coordinates: coordinates
+              }
+            }
+          });
+        }
+
+        // 레이어가 없으면 생성
+        if (!map.getLayer('route-line')) {
+          // 배경 라인 (더 두껍고 반투명)
+          map.addLayer({
+            id: 'route-line-bg',
+            type: 'line',
+            source: 'route',
+            layout: {
+              'line-join': 'round',
+              'line-cap': 'round'
+            },
+            paint: {
+              'line-color': '#ffffff',
+              'line-width': 8,
+              'line-opacity': 0.4
+            }
+          });
+
+          // 메인 경로 라인
+          map.addLayer({
+            id: 'route-line',
+            type: 'line',
+            source: 'route',
+            layout: {
+              'line-join': 'round',
+              'line-cap': 'round'
+            },
+            paint: {
+              'line-color': '#667eea',
+              'line-width': 5,
+              'line-opacity': 0.9
+            }
+          });
+        }
+      } else {
+        // 포인트가 1개 이하일 때는 경로 라인 제거
+        if (map.getLayer('route-line')) {
+          map.removeLayer('route-line');
+        }
+        if (map.getLayer('route-line-bg')) {
+          map.removeLayer('route-line-bg');
+        }
+        if (map.getSource('route')) {
+          map.removeSource('route');
+        }
+      }
+
+      // 클러스터링 적용
+      const clusters = clusterMarkers(visibleForMarkers, 50); // 50미터 반경 내 마커 클러스터링
+      
+      clusters.forEach((cluster, clusterIdx) => {
+        const isCluster = cluster.points.length > 1;
+        const isCurrent = cluster.points.some(p => 
+          visibleForMarkers.indexOf(p) === visibleForMarkers.length - 1
+        );
+        
+        if (isCluster) {
+          // 클러스터 마커 생성
+          const el = document.createElement('div');
+          el.className = 'cluster-marker';
+          const size = Math.min(50, 30 + cluster.points.length * 2);
+          el.style.width = size + 'px';
+          el.style.height = size + 'px';
+          el.style.fontSize = size > 40 ? '16px' : '14px';
+          el.textContent = cluster.points.length;
+          
+          // 클러스터 요약 정보 생성 (팝업용)
+          const sortedPoints = [...cluster.points].sort((a, b) => a.start - b.start);
+          const firstPoint = sortedPoints[0];
+          const lastPoint = sortedPoints[sortedPoints.length - 1];
+          const totalDuration = cluster.points.reduce((sum, p) => sum + p.durationHours, 0);
+          const types = [...new Set(cluster.points.map(p => p.type))];
+          
+          // 팝업 생성
+          const popup = new maplibregl.Popup({ 
+            offset: 25,
+            closeButton: true,
+            closeOnClick: false,
+            className: 'custom-popup'
+          })
+            .setHTML(`
+              <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; padding: 4px;">
+                <div style="margin-bottom: 8px;">
+                  <b style="color: #667eea; font-size: 16px; display: block; margin-bottom: 4px;">
+                    📍 클러스터 (${cluster.points.length}개 위치)
+                  </b>
+                  <span style="color: #999; font-size: 11px;">
+                    중심 위치: ${cluster.centerLat.toFixed(6)}, ${cluster.centerLng.toFixed(6)}
+                  </span>
+                </div>
+                <div style="border-top: 1px solid #eee; padding-top: 8px; margin-top: 8px;">
+                  <div style="color: #666; font-size: 13px; line-height: 1.6;">
+                    <div style="margin-bottom: 4px;">
+                      <span style="color: #999;">📍 위치 유형:</span> 
+                      <strong style="color: #333;">${types.join(', ')}</strong>
+                    </div>
+                    <div style="margin-bottom: 4px;">
+                      <span style="color: #999;">⏱️ 총 체류 시간:</span> 
+                      <strong style="color: #333;">${totalDuration.toFixed(1)}시간</strong>
+                    </div>
+                    <div style="margin-bottom: 4px;">
+                      <span style="color: #999;">🕐 첫 방문:</span> 
+                      <strong style="color: #333;">${firstPoint.start.toLocaleString('ko-KR')}</strong>
+                    </div>
+                    <div style="margin-bottom: 4px;">
+                      <span style="color: #999;">🕐 마지막 방문:</span> 
+                      <strong style="color: #333;">${lastPoint.end.toLocaleString('ko-KR')}</strong>
+                    </div>
+                    <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #eee;">
+                      <button id="showClusterDetails" style="
+                        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                        color: white;
+                        border: none;
+                        padding: 8px 16px;
+                        border-radius: 6px;
+                        cursor: pointer;
+                        font-size: 12px;
+                        font-weight: 600;
+                        width: 100%;
+                        transition: all 0.2s ease;
+                      " onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">
+                        📋 상세 목록 보기
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            `);
+          
+          const marker = new maplibregl.Marker(el)
+            .setLngLat([cluster.centerLng, cluster.centerLat])
+            .setPopup(popup)
+            .addTo(map);
+          
+          // 팝업이 열릴 때 상세 목록 버튼 이벤트 추가
+          marker.on('popupopen', () => {
+            const showDetailsBtn = document.getElementById('showClusterDetails');
+            if (showDetailsBtn) {
+              showDetailsBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                popup.remove(); // 팝업 닫기
+                const dropdown = createClusterDropdown(cluster, el);
+                dropdown.classList.add('show');
+              });
+            }
+          });
+          
+          // 클러스터 클릭 시 팝업 토글
+          el.addEventListener('click', (e) => {
+            e.stopPropagation();
+            // 팝업 토글
+            if (marker.getPopup().isOpen()) {
+              marker.togglePopup();
+            } else {
+              marker.togglePopup();
+            }
+          });
+          
+          markers.push(marker);
+          popups.push(popup);
+        } else {
+          // 단일 마커 (클러스터링되지 않은 경우)
+          const p = cluster.points[0];
+          const idx = visibleForMarkers.indexOf(p);
+          const isCurrentSingle = idx === visibleForMarkers.length - 1;
+          const baseRadius = Math.min(16, 5 + p.durationHours * 1.5);
+          const radius = isCurrentSingle ? baseRadius + 2 : baseRadius;
+          const color = getColor(p.type);
+
+          const el = document.createElement('div');
+          el.className = 'custom-marker';
+          el.style.width = radius * 2 + 'px';
+          el.style.height = radius * 2 + 'px';
+          el.style.borderRadius = '50%';
+          el.style.backgroundColor = color;
+          el.style.border = `3px solid #ffffff`;
+          el.style.boxShadow = isCurrentSingle 
+            ? `0 0 0 4px ${color}40, 0 4px 12px rgba(0,0,0,0.3)` 
+            : '0 2px 8px rgba(0,0,0,0.2)';
+          el.style.cursor = 'pointer';
+          el.style.transition = 'all 0.3s ease';
+
+          // 팝업 생성
+          const popup = new maplibregl.Popup({ 
+            offset: 25,
+            closeButton: true,
+            closeOnClick: false,
+            className: 'custom-popup'
+          })
+            .setHTML(`
+              <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; padding: 4px;">
+                <div style="margin-bottom: 8px;">
+                  <b style="color: ${color}; font-size: 16px; display: block; margin-bottom: 4px;">${p.type}</b>
+                  <span style="color: #999; font-size: 11px;">위치: ${p.lat.toFixed(6)}, ${p.lng.toFixed(6)}</span>
+                </div>
+                <div style="border-top: 1px solid #eee; padding-top: 8px; margin-top: 8px;">
+                  <div style="color: #666; font-size: 13px; line-height: 1.6;">
+                    <div style="margin-bottom: 4px;">
+                      <span style="color: #999;">⏱️ 체류 시간:</span> 
+                      <strong style="color: #333;">${p.durationHours.toFixed(1)}시간</strong>
+                    </div>
+                    <div style="margin-bottom: 4px;">
+                      <span style="color: #999;">🕐 시작:</span> 
+                      <strong style="color: #333;">${p.start.toLocaleString('ko-KR')}</strong>
+                    </div>
+                    <div>
+                      <span style="color: #999;">🕐 종료:</span> 
+                      <strong style="color: #333;">${p.end.toLocaleString('ko-KR')}</strong>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            `);
+
+          const marker = new maplibregl.Marker(el)
+            .setLngLat([p.lng, p.lat])
+            .setPopup(popup)
+            .addTo(map);
+
+          // 마커 호버 효과
+          el.addEventListener('mouseenter', () => {
+            el.style.transform = 'scale(1.2)';
+            el.style.zIndex = '1000';
+          });
+          
+          el.addEventListener('mouseleave', () => {
+            el.style.transform = 'scale(1)';
+            el.style.zIndex = 'auto';
+          });
+
+          markers.push(marker);
+          popups.push(popup);
+        }
+      });
+
+      // 지도 중심 이동 (줌 레벨은 유지, 사용자가 줌 조작 중이거나 skipAutoMove가 true일 때는 스킵)
+      if (!skipAutoMove && autoMoveEnabled && !isUserZooming) {
+        const currentZoom = map.getZoom();
+        map.easeTo({
+          center: [current.lng, current.lat],
+          zoom: currentZoom, // 현재 줌 레벨 유지
+          duration: 500
+        });
+      }
+    }
+
+    // 현재 렌더 인덱스 저장
+    let currentRenderIndex = 0;
+    let isUserZooming = false; // 사용자가 줌 조작 중인지 여부
+    let autoMoveEnabled = true; // 자동 이동 활성화 여부
+
+    // 지도 로드 후 초기 렌더링
+    map.on('load', () => {
+      render(0);
+      currentRenderIndex = 0;
+    });
+
+    // 사용자가 줌 시작할 때
+    map.on('zoomstart', () => {
+      isUserZooming = true;
+    });
+
+    // 사용자가 줌 종료할 때
+    map.on('zoomend', () => {
+      if (isUserZooming) {
+        // 사용자가 줌을 조작한 경우, 클러스터링만 재계산하고 자동 이동은 하지 않음
+        isUserZooming = false;
+        render(currentRenderIndex, { skipAutoMove: true });
+      }
+    });
+
+    // 지도 클릭 시 드롭다운 닫기
+    map.on('click', () => {
+      const dropdown = document.querySelector('.cluster-dropdown');
+      if (dropdown) {
+        dropdown.classList.remove('show');
+      }
+    });
+
+    /* 슬라이더 - 사용자 조작 비활성화 */
+    // slider.addEventListener('input', e => {
+    //   render(Number(e.target.value));
+    // });
+
+    /* ⏩ 빨리감기 토글 */
+    speedBtn.addEventListener('click', () => {
+      // 현재 속도 인덱스 찾기
+      const currentIndex = speedOptions.indexOf(playbackSpeed);
+      // 다음 속도로 변경 (순환)
+      const nextIndex = (currentIndex + 1) % speedOptions.length;
+      playbackSpeed = speedOptions[nextIndex];
+      
+      // 버튼 텍스트 업데이트
+      speedBtn.textContent = playbackSpeed === 1 ? '⏩ 1x' : playbackSpeed === 2 ? '⏩⏩ 2x' : '⏩⏩⏩ 4x';
+      
+      // 활성 상태 표시
+      if (playbackSpeed > 1) {
+        speedBtn.classList.add('active');
+      } else {
+        speedBtn.classList.remove('active');
+      }
+      
+      // 재생 중이면 타이머 재시작
+      if (timer) {
+        clearInterval(timer);
+        timer = null;
+        // 재생 재시작
+        playBtn.click();
+      }
+    });
+
+    /* ▶ 재생 (메모리 최적화) */
+    playBtn.addEventListener('click', () => {
+      if (timer) return;
+
+      playBtn.style.display = 'none';
+      pauseBtn.style.display = 'inline-block';
+
+      let frameCount = 0;
+      const currentInterval = baseInterval / playbackSpeed; // 재생 속도에 따라 간격 조정
+      
+      timer = setInterval(() => {
+        let v = Number(slider.value);
+        if (v >= slider.max) {
+          clearInterval(timer);
+          timer = null;
+          playBtn.style.display = 'inline-block';
+          pauseBtn.style.display = 'none';
+          return;
+        }
+        
+        // 재생 속도에 따라 여러 프레임 건너뛰기
+        const step = playbackSpeed;
+        slider.value = Math.min(v + step, slider.max);
+        render(Number(slider.value));
+        
+        // 주기적으로 메모리 정리 힌트 (매 50프레임마다)
+        frameCount++;
+        if (frameCount % 50 === 0) {
+          // 브라우저에게 가비지 컬렉션 힌트 제공
+          if (window.gc) {
+            window.gc();
+          }
+        }
+      }, currentInterval);
+    });
+
+    /* ⏸ 정지 */
+    pauseBtn.addEventListener('click', () => {
+      clearInterval(timer);
+      timer = null;
+      playBtn.style.display = 'inline-block';
+      pauseBtn.style.display = 'none';
+    });
+
+    /* ⏮ 다시 재생 */
+    restartBtn.addEventListener('click', () => {
+      clearInterval(timer);
+      timer = null;
+      playBtn.style.display = 'inline-block';
+      pauseBtn.style.display = 'none';
+      slider.value = 0;
+      render(0);
+    });
+
+    /* 💾 다운로드 */
+    downloadBtn.addEventListener('click', () => {
+      window.location.href = '/api/download';
+    });
+
+    /* 범례 */
+    const legend = document.createElement('div');
+    legend.className = 'legend';
+    legend.innerHTML = `
+      <b style="color: #333; margin-bottom: 4px; display: block;">방문 유형</b>
+      <span style="color:#10b981; font-size: 16px;">●</span> <span style="color: #555;">Home</span><br/>
+      <span style="color:#3b82f6; font-size: 16px;">●</span> <span style="color: #555;">Work</span><br/>
+      <span style="color:#8b5cf6; font-size: 16px;">●</span> <span style="color: #555;">Other</span>
+    `;
+    legend.style.position = 'absolute';
+    legend.style.bottom = '20px';
+    legend.style.right = '20px';
+    legend.style.zIndex = '1000';
+    document.body.appendChild(legend);
+  }).catch(error => {
+    console.error('데이터 처리 오류:', error);
+    alert('데이터를 불러오는 중 오류가 발생했습니다: ' + error.message);
+  });
+</script>
+
+</body>
+</html>

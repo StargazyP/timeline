@@ -1,0 +1,36 @@
+services:
+  timeline-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: timeline-app
+    ports:
+      - "3004:3004"
+    environment:
+      - NODE_ENV=production
+      - PORT=3004
+    volumes:
+      # 업로드된 파일 영구 저장
+      - ./uploads:/app/uploads
+      # 데이터 파일 영구 저장
+      - ./data:/app/data
+      # 로그 파일 영구 저장
+      - ./logs:/app/logs
+      # visits.json 영구 저장
+      - ./public/visits.json:/app/public/visits.json
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3004/', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 40s
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+

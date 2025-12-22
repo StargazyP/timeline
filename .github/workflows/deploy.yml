@@ -1,0 +1,126 @@
+name: Deploy Timeline App
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+env:
+  DOCKER_IMAGE_NAME: timeline-app
+  APP_PORT: 3004
+
+jobs:
+  deploy:
+    name: Deploy to Server
+    runs-on: ubuntu-latest
+    needs: []
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || github.event_name == 'workflow_dispatch'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download Docker image artifact (if not using Docker Hub)
+        id: check-dockerhub
+        run: |
+          if [ -z "${{ secrets.DOCKERHUB_USERNAME }}" ]; then
+            echo "use_local=true" >> $GITHUB_OUTPUT
+          else
+            echo "use_local=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Download Docker image artifact
+        if: steps.check-dockerhub.outputs.use_local == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          name: docker-image
+          path: .
+
+      - name: Copy files to server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.SSH_PORT || 22 }}
+          source: "docker-compose.yml"
+          target: "/home/${{ secrets.SSH_USERNAME }}/포트폴리오/timeline/"
+
+      - name: Copy Docker image to server (if not using Docker Hub)
+        if: steps.check-dockerhub.outputs.use_local == 'true'
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.SSH_PORT || 22 }}
+          source: "timeline-app.tar.gz"
+          target: "/home/${{ secrets.SSH_USERNAME }}/포트폴리오/timeline/"
+
+      - name: Deploy via Webhook (Fast)
+        id: webhook-deploy
+        continue-on-error: true
+        run: |
+          if [ -z "${{ secrets.WEBHOOK_URL }}" ]; then
+            echo "Webhook URL이 설정되지 않았습니다. SSH 배포로 진행합니다."
+            exit 1
+          fi
+          echo "Webhook을 통한 즉각 배포 시도..."
+          curl -X POST ${{ secrets.WEBHOOK_URL }} \
+            -H "Content-Type: application/json" \
+            -H "X-GitHub-Event: push" \
+            -d '{"ref":"${{ github.ref }}","head_commit":{"id":"${{ github.sha }}"}}' \
+            --max-time 30 \
+            --connect-timeout 10 \
+            -f || (echo "⚠️ Webhook 호출 실패, SSH 배포로 대체합니다" && exit 1)
+
+      - name: Deploy to server via SSH (Fallback)
+        if: always() && (steps.webhook-deploy.outcome == 'failure' || steps.webhook-deploy.outcome == 'skipped')
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.SSH_PORT || 22 }}
+          script: |
+            set -e
+            cd /home/${{ secrets.SSH_USERNAME }}/포트폴리오/timeline || exit 1
+            
+            # 필요한 디렉토리 생성 (데이터 보존)
+            mkdir -p uploads data logs public
+            
+            # Docker Hub에서 이미지 pull 또는 로컬 이미지 로드
+            if [ -f timeline-app.tar.gz ]; then
+              echo "로컬 Docker 이미지 로드 중..."
+              docker load < timeline-app.tar.gz
+            else
+              echo "Docker Hub에서 이미지 pull 시도 중..."
+              docker compose pull timeline-app || echo "이미지가 없거나 로컬 빌드 사용!"
+            fi
+            
+            # 기존 컨테이너 중지 (데이터는 volumes에 보존됨)
+            docker compose down || true
+            
+            # 새 컨테이너 시작
+            docker compose up -d --build
+            
+            # 불필요한 이미지 정리
+            docker image prune -f --filter "until=24h" || true
+            
+            # 배포 완료 확인
+            sleep 5
+            echo "=== Container Status ==="
+            docker compose ps
+            
+            echo "=== Container Logs (last 50 lines) ==="
+            docker compose logs --tail=50 timeline-app || true
+
+      - name: Health check
+        run: |
+          sleep 10
+          echo "헬스 체크 시작..."
+          curl -f http://${{ secrets.SSH_HOST }}:${{ env.APP_PORT }}/ || (echo "⚠️ 헬스 체크 실패" && exit 1)
+          echo "✅ 배포 성공!"
+
