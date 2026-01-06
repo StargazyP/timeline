@@ -350,7 +350,7 @@ app.get('/api/stats', async (req, res) => {
   }
 });
 
-// 독립 실행 가능한 HTML 파일 다운로드
+// 독립 실행 가능한 HTML 파일 다운로드 (로컬 실행 가능, CORS 문제 해결)
 app.get('/api/download', async (req, res) => {
   try {
     const dataPath = path.join(__dirname, 'public', 'visits.json');
@@ -360,15 +360,21 @@ app.get('/api/download', async (req, res) => {
     let indexHtml = await fs.readFile(indexPath, 'utf8');
     
     // visits.json 데이터를 HTML에 인라인으로 삽입
-    // fetch('visits.json').then(res => res.json()).then(data => { 부분을 찾아서 대체
     const dataJson = JSON.parse(visitsData);
     const dataString = JSON.stringify(dataJson);
     
-    // fetch 부분을 데이터로 직접 대체
-    indexHtml = indexHtml.replace(
-      /fetch\('visits\.json'\)\s*\.then\(res\s*=>\s*res\.json\(\)\)\s*\.then\(data\s*=>\s*\{/,
-      `Promise.resolve(${dataString}).then(data => {`
-    );
+    // 스크립트 태그에 데이터를 인라인으로 포함 (로컬 실행 가능)
+    const inlineDataScript = `
+    <script>
+    // 인라인 데이터 (로컬 실행용 - CORS 문제 해결)
+    window.VISITS_DATA = ${dataString};
+    </script>
+    `;
+    
+    // </head> 태그 앞에 인라인 데이터 스크립트 삽입
+    indexHtml = indexHtml.replace('</head>', `${inlineDataScript}</head>`);
+    
+    // index.html이 이미 수정되어 있으므로 추가 수정 불필요
     
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     res.setHeader('Content-Disposition', 'attachment; filename="timeline-map.html"');
