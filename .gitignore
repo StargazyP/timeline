@@ -31,11 +31,40 @@ Thumbs.db
 *.swo
 *~
 
-# Documentation files (모든 MD 파일 제외)
+# Documentation files (모든 MD 파일 제외, 단 README.md는 예외)
 *.md
+!README.md
 
-# Secrets 파일 (절대 업로드 금지)
+# ============================================
+# 보안 관련 파일 (절대 업로드 금지)
+# ============================================
+
+# Secrets 파일
 GITHUB_SECRETS_VALUES.txt
 *SECRETS*.txt
 *secrets*.txt
+
+# CI/CD 설정 파일 (서버 경로, 포트 정보 포함)
+# deploy.yml은 서버 경로와 포트 정보가 포함되어 있어 제외
+.github/workflows/deploy.yml
+
+# PM2 설정 파일 (포트, 메모리 설정 등)
+ecosystem.config.js
+
+# Docker 설정 파일 (포트, 볼륨 경로 등)
+docker-compose.yml
+docker-compose.*.yml
+!docker-compose.example.yml
+
+# Nginx 설정 파일 (서버 경로 포함)
+nginx.conf
+nginx.conf.example
+*.conf
+!nginx.conf.example.template
+
+# Webhook 관련 파일 (시크릿, 서버 정보 포함)
+webhook-server.js
+webhook-setup.sh
+*webhook*.js
+*webhook*.sh
 
